@@ -18,7 +18,6 @@ import KeyboardInput from './src/components/KeyboardInput';
 import { useVoiceRecorder } from './src/hooks/useVoiceRecorder';
 import { globalStyles } from './src/styles/globalStyles';
 import { colors } from './src/styles/colors';
-
 const { width } = Dimensions.get('window');
 
 interface Styles {

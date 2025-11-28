@@ -1,3 +1,26 @@
+import { Audio } from 'expo-av'
+
+
+export interface RecordingStatus {
+  isRecording: boolean;
+  isProcessing: boolean;
+}
+
+export interface RecordingStatus {
+  isRecording: boolean;
+  isProcessing: boolean;
+}
+
+export interface VoiceRecorderHook{
+  transcript: string;
+  isRecording: boolean;
+  isProcessing: boolean;
+  startRecording: () => Promise<void>;
+  stopRecording: () => Promise<void>;
+  clearTranscript: () => void;
+  setTranscript: (text: string) => void;
+}
+
 export interface MicButtonProps {
   isRecording: boolean;
   isProcessing: boolean;
@@ -20,13 +43,11 @@ export interface ApiResponse{
   status?: string;
 }
 
-export interface AudioPermission {
-  granted: boolean;
-  status?: StatusIndicatorProps;
-}
-
 export enum RecordingState {
   IDLE="idle",
   RECORDING="recording",
   PROCESSING="processing",
 }
+
+
+// return (result as any).text || MESSAGES.NO_AUDIO;

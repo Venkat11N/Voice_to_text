@@ -1,6 +1,7 @@
-export const WIT_AI_TOKEN: string =process.env.WIT_API_TOKEN;
+// Now process.env will work!
+export const WIT_AI_TOKEN: string = process.env.WIT_AI_TOKEN || '';
 
-export const WIT_API_URL:string = ''
+export const WIT_API_URL: string = 'https://api.wit.ai/speech?v=20231117';
 
 export interface MessagesType {
   readonly DEFAULT: string;
