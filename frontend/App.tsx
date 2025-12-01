@@ -1,4 +1,4 @@
-import React, { FC } from 'react';
+import React, { FC, useRef, useEffect } from 'react';
 import {
   Text,
   TouchableOpacity,
@@ -9,6 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   View,
+  Keyboard,
   Dimensions,
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
@@ -18,20 +19,27 @@ import KeyboardInput from './src/components/KeyboardInput';
 import { useVoiceRecorder } from './src/hooks/useVoiceRecorder';
 import { globalStyles } from './src/styles/globalStyles';
 import { colors } from './src/styles/colors';
-const { width } = Dimensions.get('window');
+
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 interface Styles {
   container: ViewStyle;
+  innerContainer: ViewStyle;
   scrollContent: ViewStyle;
-  inputContainer: ViewStyle;
-  micContainer: ViewStyle;
+  inputSection: ViewStyle;
+  voiceSection: ViewStyle;
+  keyboardSection: ViewStyle;
   clearButton: ViewStyle;
   clearText: TextStyle;
-  statusText: TextStyle;
-  bottomInputSection: ViewStyle;
+  orText: TextStyle;
+  inputMethodText: TextStyle;
+  transcriptSection: ViewStyle;
 }
 
 const App: FC = () => {
+  const scrollViewRef = useRef<ScrollView>(null);
+  const [keyboardHeight, setKeyboardHeight] = React.useState(0);
+  
   const {
     transcript,
     isRecording,
@@ -42,87 +50,103 @@ const App: FC = () => {
     setTranscript,
   } = useVoiceRecorder();
 
+  // Handle keyboard show/hide
+  useEffect(() => {
+    const keyboardWillShow = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      (e) => {
+        setKeyboardHeight(e.endCoordinates.height);
+        // Auto scroll to bottom when keyboard opens
+        setTimeout(() => {
+          scrollViewRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+      }
+    );
+
+    const keyboardWillHide = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => {
+        setKeyboardHeight(0);
+      }
+    );
+
+    return () => {
+      keyboardWillShow.remove();
+      keyboardWillHide.remove();
+    };
+  }, []);
+
   const handleKeyboardSubmit = (text: string): void => {
     setTranscript(text);
-  };
-
-  const getStatusText = (): string => {
-    if (isRecording) return '🔴 Recording...';
-    if (isProcessing) return '⏳ Processing...';
+    Keyboard.dismiss();
   };
 
   return (
     <SafeAreaProvider>
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['top']}>
         <KeyboardAvoidingView 
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.container}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
         >
           <ScrollView 
-            contentContainerStyle={styles.scrollContent}
+            ref={scrollViewRef}
+            contentContainerStyle={[
+              styles.scrollContent,
+              { paddingBottom: keyboardHeight > 0 ? keyboardHeight + 100 : 40 }
+            ]}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
+            bounces={true}
           >
             <Text style={globalStyles.title}>💬 Voice & Text</Text>
-            <Text style={globalStyles.subtitle}>Multiple Input Methods</Text>
+            <Text style={globalStyles.subtitle}>Speak or Type Your Message</Text>
 
             {/* Display Area */}
-            <TranscriptDisplay 
-              transcript={transcript} 
-              isProcessing={isProcessing} 
-            />
+            <View style={styles.transcriptSection}>
+              <TranscriptDisplay 
+                transcript={transcript} 
+                isProcessing={isProcessing} 
+              />
 
-            {/* Clear Button */}
-            {transcript && !isProcessing && (
-              <TouchableOpacity 
-                style={styles.clearButton} 
-                onPress={clearTranscript}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.clearText}>Clear All</Text>
-              </TouchableOpacity>
-            )}
-          </ScrollView>
+              {/* Clear Button */}
+              {transcript && !isProcessing && (
+                <TouchableOpacity 
+                  style={styles.clearButton} 
+                  onPress={clearTranscript}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.clearText}>Clear Text</Text>
+                </TouchableOpacity>
+              )}
+            </View>
 
-          {/* Bottom Input Section - Always Visible */}
-          <View style={styles.bottomInputSection}>
-            <Text style={styles.statusText}>{getStatusText()}</Text>
-            
-            <View style={styles.inputContainer}>
-              {/* Keyboard Input - Takes most space */}
-              <View style={{ flex: 1 }}>
+            {/* Input Section */}
+            <View style={styles.inputSection}>
+              {/* Voice Input Section */}
+              <View style={styles.voiceSection}>
+                <Text style={styles.inputMethodText}>🎤 Hold to Record</Text>
+                <MicButton
+                  isRecording={isRecording}
+                  isProcessing={isProcessing}
+                  onPressIn={startRecording}
+                  onPressOut={stopRecording}
+                />
+              </View>
+
+              {/* OR Separator */}
+              <Text style={styles.orText}>— OR —</Text>
+
+              {/* Keyboard Input Section */}
+              <View style={styles.keyboardSection}>
+                <Text style={styles.inputMethodText}>⌨️ Type Your Message</Text>
                 <KeyboardInput 
                   onSubmit={handleKeyboardSubmit}
                   isProcessing={isProcessing}
                 />
               </View>
-
-              {/* Mic Button - Fixed size on the right */}
-              <View style={styles.micContainer}>
-                <TouchableOpacity
-                  style={[
-                    {
-                      width: 60,
-                      height: 60,
-                      borderRadius: 30,
-                      backgroundColor: isRecording ? colors.danger : colors.primary,
-                      justifyContent: 'center',
-                      alignItems: 'center',
-                      marginLeft: 10,
-                    },
-                    isProcessing && { backgroundColor: colors.disabled }
-                  ]}
-                  onPressIn={startRecording}
-                  onPressOut={stopRecording}
-                  disabled={isProcessing}
-                >
-                  <Text style={{ fontSize: 28 }}>
-                    {isRecording ? '🔴' : '🎤'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
             </View>
-          </View>
+          </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
     </SafeAreaProvider>
@@ -134,54 +158,56 @@ const styles = StyleSheet.create<Styles>({
     flex: 1,
     backgroundColor: colors.background,
   },
+  innerContainer: {
+    flex: 1,
+  },
   scrollContent: {
     flexGrow: 1,
-    alignItems: 'center',
-    padding: 20,
-    paddingBottom: 120, // Space for bottom input
+    paddingHorizontal: 20,
+    paddingTop: 20,
   },
-  bottomInputSection: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: colors.white,
-    borderTopWidth: 1,
-    borderTopColor: colors.button,
-    paddingTop: 10,
-    paddingBottom: 20,
-    paddingHorizontal: 15,
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 5,
+  transcriptSection: {
+    width: '100%',
+    marginBottom: 20,
   },
-  inputContainer: {
-    flexDirection: 'row',
+  inputSection: {
+    width: '100%',
     alignItems: 'center',
+    paddingVertical: 20,
   },
-  micContainer: {
-    justifyContent: 'center',
+  voiceSection: {
+    width: '100%',
     alignItems: 'center',
+    marginBottom: 20,
+  },
+  keyboardSection: {
+    width: '100%',
+    alignItems: 'center',
+    marginTop: 10,
   },
   clearButton: {
     marginTop: 20,
-    paddingHorizontal: 30,
+    paddingHorizontal: 40,
     paddingVertical: 12,
     backgroundColor: colors.danger,
-    borderRadius: 25,
+    borderRadius: 30,
+    alignSelf: 'center',
   },
   clearText: {
-    fontSize: 15,
+    fontSize: 16,
     color: colors.white,
     fontWeight: '600',
   },
-  statusText: {
-    fontSize: 12,
+  orText: {
     color: colors.text.secondary,
-    textAlign: 'center',
-    marginBottom: 8,
+    fontSize: 16,
+    fontWeight: '600',
+    marginVertical: 20,
+  },
+  inputMethodText: {
+    color: colors.text.secondary,
+    fontSize: 14,
+    marginBottom: 10,
   },
 });
 

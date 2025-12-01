@@ -49,5 +49,3 @@ export enum RecordingState {
   PROCESSING="processing",
 }
 
-
-// return (result as any).text || MESSAGES.NO_AUDIO;

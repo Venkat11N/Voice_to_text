@@ -1,4 +1,4 @@
-import React, { FC, useState } from 'react';
+import React, { FC, useState, useRef } from 'react';
 import {
   View,
   TextInput,
@@ -8,13 +8,14 @@ import {
   ViewStyle,
   TextStyle,
   Keyboard,
+  Platform,
 } from 'react-native';
 import { colors } from '../styles/colors';
 
 interface KeyboardInputProps {
   onSubmit: (text: string) => void;
   isProcessing: boolean;
-  compact?: boolean; // For side-by-side layout
+  compact?: boolean;
 }
 
 interface Styles {
@@ -33,20 +34,34 @@ const KeyboardInput: FC<KeyboardInputProps> = ({
   compact = false 
 }) => {
   const [inputText, setInputText] = useState<string>('');
+  const [inputHeight, setInputHeight] = useState<number>(40);
+  const inputRef = useRef<TextInput>(null);
 
   const handleSend = (): void => {
     if (inputText.trim() && !isProcessing) {
       onSubmit(inputText.trim());
       setInputText('');
+      setInputHeight(5);
       Keyboard.dismiss();
     }
+  };
+
+  const handleContentSizeChange = (event: any) => {
+    const height = event.nativeEvent.contentSize.height;
+    // Limit max height to 120
+    setInputHeight(Math.min(Math.max(40, height), 120));
   };
 
   return (
     <View style={styles.container}>
       <View style={styles.inputContainer}>
         <TextInput
-          style={[styles.textInput, compact && styles.compactInput]}
+          ref={inputRef}
+          style={[
+            styles.textInput,
+            { height: inputHeight },
+            compact && styles.compactInput
+          ]}
           value={inputText}
           onChangeText={setInputText}
           placeholder="Type your message..."
@@ -56,6 +71,9 @@ const KeyboardInput: FC<KeyboardInputProps> = ({
           editable={!isProcessing}
           onSubmitEditing={handleSend}
           returnKeyType="send"
+          blurOnSubmit={true}
+          onContentSizeChange={handleContentSizeChange}
+          scrollEnabled={inputHeight > 80}
         />
         <TouchableOpacity
           style={[
@@ -79,7 +97,7 @@ const styles = StyleSheet.create<Styles>({
   },
   inputContainer: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     backgroundColor: colors.white,
     borderRadius: 25,
     paddingLeft: 15,
@@ -87,15 +105,16 @@ const styles = StyleSheet.create<Styles>({
     paddingVertical: 5,
     borderWidth: 1,
     borderColor: colors.button,
+    minHeight: 50,
   },
   textInput: {
     flex: 1,
     fontSize: 16,
     color: colors.text.dark,
-    maxHeight: 100,
     minHeight: 40,
-    paddingVertical: 8,
+    paddingVertical: Platform.OS === 'ios' ? 10 : 5,
     paddingHorizontal: 5,
+    paddingRight: 10,
   },
   compactInput: {
     maxHeight: 40,
@@ -109,6 +128,7 @@ const styles = StyleSheet.create<Styles>({
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: 8,
+    marginBottom: 5,
   },
   sendButtonDisabled: {
     backgroundColor: colors.disabled,
