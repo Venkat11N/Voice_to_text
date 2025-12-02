@@ -134,15 +134,16 @@ const App: FC = () => {
                 />
               </View>
 
-              {/* OR Separator */}
               <Text style={styles.orText}>— OR —</Text>
 
-              {/* Keyboard Input Section */}
               <View style={styles.keyboardSection}>
                 <Text style={styles.inputMethodText}>⌨️ Type Your Message</Text>
                 <KeyboardInput 
                   onSubmit={handleKeyboardSubmit}
                   isProcessing={isProcessing}
+                  onStartRecording={startRecording}
+                  onStopRecording={stopRecording}
+                  isRecording={isRecording}
                 />
               </View>
             </View>

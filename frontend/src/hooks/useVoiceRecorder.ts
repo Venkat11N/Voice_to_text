@@ -7,14 +7,14 @@ import { MESSAGES } from '../config/constants';
 
 // Recording options
 const RECORDING_OPTIONS = {
-  isMeteringEnabled: false,
+  isMeteringEnabled: true,
   android: {
     extension: '.wav',
     outputFormat: Audio.AndroidOutputFormat.DEFAULT,
     audioEncoder: Audio.AndroidAudioEncoder.DEFAULT,
     sampleRate: 16000,
     numberOfChannels: 1,
-    bitRate: 256000,
+    bitRate: 128000,
   },
   ios: {
     extension: '.wav',
@@ -22,14 +22,14 @@ const RECORDING_OPTIONS = {
     audioQuality: Audio.IOSAudioQuality.MAX,
     sampleRate: 16000,
     numberOfChannels: 1,
-    bitRate: 256000,
+    bitRate: 128000,
     linearPCMBitDepth: 16,
     linearPCMIsBigEndian: false,
     linearPCMIsFloat: false,
   },
   web: {
     mimeType: 'audio/wav',
-    bitsPerSecond: 256000,
+    bitsPerSecond: 128000,
   },
 };
 
@@ -38,56 +38,22 @@ export const useVoiceRecorder = (): VoiceRecorderHook => {
   const [isRecording, setIsRecording] = useState<boolean>(false);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [audioFileUri, setAudioFileUri] = useState<string>('');
-  const [isInitialized, setIsInitialized] = useState<boolean>(false);
   
   const recordingRef = useRef<Audio.Recording | null>(null);
 
-  // Initialize audio on mount
+  // Initialize permissions on mount (optional but good UX)
   useEffect(() => {
-    let isMounted = true;
-
-    const initializeAudio = async () => {
+    const getPermissions = async () => {
       try {
-        console.log('🔧 Initializing audio...');
-        
-        // Check if Audio is available
-        if (!Audio) {
-          console.error('❌ Audio module not available');
-          return;
-        }
-
-        // Request permissions
-        const permissionResponse = await Audio.requestPermissionsAsync();
-        
-        if (!permissionResponse.granted) {
-          console.log('❌ Permission denied');
-          if (isMounted) {
-            alert(MESSAGES.PERMISSION_DENIED);
-          }
-          return;
-        }
-
-        // Set audio mode
-        await Audio.setAudioModeAsync({
-          allowsRecordingIOS: true,
-          playsInSilentModeIOS: true,
-          staysActiveInBackground: false,
-        });
-
-        if (isMounted) {
-          setIsInitialized(true);
-          console.log('✅ Audio initialized');
-        }
+        await Audio.requestPermissionsAsync();
       } catch (error) {
-        console.error('❌ Audio initialization error:', error);
+        console.error('Permission request error:', error);
       }
     };
-
-    initializeAudio();
+    getPermissions();
 
     // Cleanup
     return () => {
-      isMounted = false;
       if (recordingRef.current) {
         try {
           recordingRef.current.stopAndUnloadAsync();
@@ -106,24 +72,23 @@ export const useVoiceRecorder = (): VoiceRecorderHook => {
         return;
       }
 
-      // Check if audio is initialized
-      if (!isInitialized) {
-        console.log('⚠️ Audio not initialized yet');
-        
-        // Try to initialize again
-        const permission = await Audio.requestPermissionsAsync();
-        if (!permission.granted) {
-          alert(MESSAGES.PERMISSION_DENIED);
-          return;
-        }
+      console.log('🎤 Starting recording...');
 
-        await Audio.setAudioModeAsync({
-          allowsRecordingIOS: true,
-          playsInSilentModeIOS: true,
-        });
+      // 1. Always Request Permission check
+      const permission = await Audio.requestPermissionsAsync();
+      if (!permission.granted) {
+        alert(MESSAGES.PERMISSION_DENIED);
+        return;
       }
 
-      console.log('🎤 Starting recording...');
+      // 2. ALWAYS Reset Audio Mode before EVERY recording
+      // This fixes the "Recording not allowed on iOS" error
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+        shouldDuckAndroid: true,
+      });
 
       // Clear previous state
       setTranscript('');
@@ -131,31 +96,10 @@ export const useVoiceRecorder = (): VoiceRecorderHook => {
 
       console.log('📼 Creating recording instance...');
       
-      // Create new recording - Check if Audio.Recording exists
-      if (!Audio.Recording) {
-        console.error('❌ Audio.Recording not available');
-        alert('Audio recording not available on this device');
-        return;
-      }
-
-      // Create recording with try-catch
-      let recording: Audio.Recording | null = null;
-      
-      try {
-        const recordingResult = await Audio.Recording.createAsync(
-          RECORDING_OPTIONS
-        );
-        recording = recordingResult.recording;
-      } catch (createError) {
-        console.error('❌ Failed to create recording:', createError);
-        alert('Failed to start recording. Please try again.');
-        return;
-      }
-
-      if (!recording) {
-        console.error('❌ Recording object is null');
-        return;
-      }
+      // 3. Create new recording
+      const { recording } = await Audio.Recording.createAsync(
+        RECORDING_OPTIONS
+      );
 
       recordingRef.current = recording;
       setIsRecording(true);
@@ -169,7 +113,7 @@ export const useVoiceRecorder = (): VoiceRecorderHook => {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
       alert('Failed to start recording: ' + errorMsg);
     }
-  }, [isRecording, isInitialized]);
+  }, [isRecording]);
 
   const stopRecording = useCallback(async (): Promise<void> => {
     try {
@@ -185,30 +129,16 @@ export const useVoiceRecorder = (): VoiceRecorderHook => {
 
       console.log('📼 Stopping and unloading...');
       
-      // Stop recording with error handling
-      try {
-        await recordingRef.current.stopAndUnloadAsync();
-      } catch (stopError) {
-        console.error('Error stopping recording:', stopError);
-      }
+      // Stop recording
+      await recordingRef.current.stopAndUnloadAsync();
       
-      // Reset audio mode
-      try {
-        await Audio.setAudioModeAsync({
-          allowsRecordingIOS: false,
-        });
-      } catch (modeError) {
-        console.error('Error resetting audio mode:', modeError);
-      }
+      // OPTIONAL: Disable recording mode to allow playback through speakers
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+      });
 
-      // Get URI safely
-      let uri: string | null = null;
-      try {
-        uri = recordingRef.current.getURI();
-      } catch (uriError) {
-        console.error('Error getting URI:', uriError);
-      }
-
+      // Get URI
+      const uri = recordingRef.current.getURI();
       console.log('📁 Recording URI:', uri);
 
       // Clear recording reference
@@ -253,7 +183,12 @@ export const useVoiceRecorder = (): VoiceRecorderHook => {
 
   const clearTranscript = useCallback((): void => {
     setTranscript('');
-    
+    if (audioFileUri) {
+      // Optional: Delete file when clearing transcript
+      FileSystem.deleteAsync(audioFileUri, { idempotent: true })
+        .catch(() => console.log('Could not delete'));
+      setAudioFileUri('');
+    }
   }, [audioFileUri]);
 
   return {

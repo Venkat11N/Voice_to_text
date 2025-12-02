@@ -1,7 +1,8 @@
-// Now process.env will work!
 export const WIT_AI_TOKEN: string = process.env.WIT_AI_TOKEN || '';
 
-export const WIT_API_URL: string = 'https://api.wit.ai/speech?v=20231117';
+export const WIT_API_URL: string = 'https://api.wit.ai/dictation?v=20231117';
+
+export const BACKEND_URL: string = process.env.BACKEND_URL;
 
 export interface MessagesType {
   readonly DEFAULT: string;
@@ -25,4 +26,5 @@ export const MESSAGES: MessagesType = {
   CONVERTING: 'Converting speech to text...',
 } as const;
 
-export const API_TIMEOUT: number = 30000;
+
+export const API_TIMEOUT: number = 60000;

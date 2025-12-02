@@ -14,79 +14,89 @@ import { colors } from '../styles/colors';
 
 interface KeyboardInputProps {
   onSubmit: (text: string) => void;
+  onStartRecording: () => void;
+  onStopRecording: () => void;
+  isRecording: boolean;
   isProcessing: boolean;
-  compact?: boolean;
 }
 
 interface Styles {
   container: ViewStyle;
-  inputContainer: ViewStyle;
+  inputWrapper: ViewStyle;
   textInput: TextStyle;
-  sendButton: ViewStyle;
-  sendButtonDisabled: ViewStyle;
-  sendButtonText: TextStyle;
-  compactInput: TextStyle;
+  actionButton: ViewStyle;
+  actionButtonRecording: ViewStyle;
+  actionButtonText: TextStyle;
 }
 
 const KeyboardInput: FC<KeyboardInputProps> = ({ 
   onSubmit, 
+  onStartRecording,
+  onStopRecording,
+  isRecording,
   isProcessing,
-  compact = false 
 }) => {
   const [inputText, setInputText] = useState<string>('');
   const [inputHeight, setInputHeight] = useState<number>(40);
   const inputRef = useRef<TextInput>(null);
 
+
+  const hasText = inputText.trim().length > 0;
+
   const handleSend = (): void => {
-    if (inputText.trim() && !isProcessing) {
+    if (hasText && !isProcessing) {
       onSubmit(inputText.trim());
       setInputText('');
-      setInputHeight(5);
-      Keyboard.dismiss();
+      setInputHeight(2); 
+      
+      // Keyboard.dismiss(); 
     }
   };
 
   const handleContentSizeChange = (event: any) => {
     const height = event.nativeEvent.contentSize.height;
-    // Limit max height to 120
-    setInputHeight(Math.min(Math.max(40, height), 120));
+    setInputHeight(Math.min(Math.max(40, height), 100));
   };
 
   return (
     <View style={styles.container}>
-      <View style={styles.inputContainer}>
+
+      <View style={styles.inputWrapper}>
         <TextInput
           ref={inputRef}
-          style={[
-            styles.textInput,
-            { height: inputHeight },
-            compact && styles.compactInput
-          ]}
+          style={[styles.textInput, { height: inputHeight }]}
           value={inputText}
           onChangeText={setInputText}
-          placeholder="Type your message..."
+          placeholder={isRecording ? "Recording..." : "Type a message..."}
           placeholderTextColor={colors.text.secondary}
-          multiline={!compact}
+          multiline={true}
           maxLength={500}
-          editable={!isProcessing}
-          onSubmitEditing={handleSend}
-          returnKeyType="send"
-          blurOnSubmit={true}
+          editable={!isProcessing && !isRecording}
+          returnKeyType="default"
           onContentSizeChange={handleContentSizeChange}
           scrollEnabled={inputHeight > 80}
         />
-        <TouchableOpacity
-          style={[
-            styles.sendButton,
-            (!inputText.trim() || isProcessing) && styles.sendButtonDisabled
-          ]}
-          onPress={handleSend}
-          disabled={!inputText.trim() || isProcessing}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.sendButtonText}>➤</Text>
-        </TouchableOpacity>
       </View>
+
+
+      <TouchableOpacity
+        style={[
+          styles.actionButton,
+          isRecording && styles.actionButtonRecording, 
+          isProcessing && { backgroundColor: colors.disabled }
+        ]}
+       
+        onPress={hasText ? handleSend : undefined}
+        onPressIn={!hasText ? onStartRecording : undefined}
+        onPressOut={!hasText ? onStopRecording : undefined}
+        activeOpacity={0.7}
+        disabled={isProcessing}
+      >
+        <Text style={styles.actionButtonText}>
+
+          {isProcessing ? '⏳' : (hasText ? '➤' : (isRecording ? '🔴' : '🎤'))}
+        </Text>
+      </TouchableOpacity>
     </View>
   );
 };
@@ -94,50 +104,60 @@ const KeyboardInput: FC<KeyboardInputProps> = ({
 const styles = StyleSheet.create<Styles>({
   container: {
     width: '100%',
+    flexDirection: 'row', 
+    alignItems: 'flex-end', 
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    backgroundColor: 'transparent', 
+    borderTopWidth: 1,
+    borderTopColor: '#F0F0F0',
   },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
+  inputWrapper: {
+    flex: 1, 
     backgroundColor: colors.white,
     borderRadius: 25,
-    paddingLeft: 15,
-    paddingRight: 5,
+    paddingHorizontal: 15,
     paddingVertical: 5,
-    borderWidth: 1,
-    borderColor: colors.button,
+    marginRight: 10, 
     minHeight: 50,
+    justifyContent: 'center',
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 1.41,
   },
   textInput: {
-    flex: 1,
     fontSize: 16,
     color: colors.text.dark,
-    minHeight: 40,
-    paddingVertical: Platform.OS === 'ios' ? 10 : 5,
-    paddingHorizontal: 5,
-    paddingRight: 10,
+    paddingTop: 10,
+    paddingBottom: 10,
+    maxHeight: 100,
   },
-  compactInput: {
-    maxHeight: 40,
-    minHeight: 40,
-  },
-  sendButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: colors.primary,
+  actionButton: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: colors.primary, 
     justifyContent: 'center',
     alignItems: 'center',
-    marginLeft: 8,
-    marginBottom: 5,
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    marginBottom: 0, 
   },
-  sendButtonDisabled: {
-    backgroundColor: colors.disabled,
+  actionButtonRecording: {
+    backgroundColor: colors.danger, 
+    transform: [{ scale: 1.1 }] 
   },
-  sendButtonText: {
+  actionButtonText: {
     color: colors.white,
-    fontSize: 18,
+    fontSize: 24,
     fontWeight: 'bold',
   },
 });
 
 export default KeyboardInput;
+

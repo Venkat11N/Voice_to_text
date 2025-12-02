@@ -1,177 +1,84 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import { WIT_AI_TOKEN, WIT_API_URL, MESSAGES } from '../config/constants';
 
-interface WitResponse {
-  text?: string;
-  is_final?: boolean;
-  error?: string;
-  entities?: object;
-  intents?: object[];
-  traits?: object;
-  speech?: {
-    confidence: number;
-    tokens: Array<{
-      token: string;
-      confidence: number;
-      start: number;
-      end: number;
-    }>;
-  };
-}
-
-// Parse multiple JSON objects from Wit.ai streaming response
 const parseWitResponse = (responseText: string): string => {
-  try {
-    // Split by newlines or }{ to separate JSON objects
-    const jsonStrings = responseText
-      .split(/\n/)
-      .filter(line => line.trim().startsWith('{'));
+  let finalTranscription = "";
+  let braceCount = 0;
+  let startIndex = 0;
+  let chunks: any[] = [];
 
-    console.log('📦 Found', jsonStrings.length, 'JSON objects');
-
-    let finalText = '';
-
-    for (const jsonStr of jsonStrings) {
-      try {
-        const parsed: WitResponse = JSON.parse(jsonStr.trim());
-        
-        // Get the text from this response
-        if (parsed.text) {
-          finalText = parsed.text;
-        }
-
-        // If this is the final response, use it
-        if (parsed.is_final && parsed.text) {
-          console.log('✅ Found final response:', parsed.text);
-          return parsed.text;
-        }
-      } catch (e) {
-        // Skip invalid JSON chunks
-        continue;
+  // 1. Extract all JSON objects from the stream
+  for (let i = 0; i < responseText.length; i++) {
+    const char = responseText[i];
+    if (char === '{') {
+      if (braceCount === 0) startIndex = i;
+      braceCount++;
+    } else if (char === '}') {
+      braceCount--;
+      if (braceCount === 0) {
+        try {
+          const jsonString = responseText.substring(startIndex, i + 1);
+          const data = JSON.parse(jsonString);
+          chunks.push(data);
+        } catch (e) {}
       }
     }
-
-    // If no final response found, return the last text we got
-    return finalText || '';
-  } catch (error) {
-    console.error('Parse error:', error);
-    return '';
   }
-};
 
-// Alternative: Extract text using regex (simpler)
-const extractTextFromResponse = (responseText: string): string => {
-  try {
-    // Find the last "text": "..." in the response
-    const textMatches = responseText.match(/"text"\s*:\s*"([^"]*)"/g);
-    
-    if (textMatches && textMatches.length > 0) {
-      // Get the last text match (most complete)
-      const lastMatch = textMatches[textMatches.length - 1];
-      const textValue = lastMatch.match(/"text"\s*:\s*"([^"]*)"/);
-      
-      if (textValue && textValue[1]) {
-        console.log('✅ Extracted text:', textValue[1]);
-        return textValue[1];
-      }
-    }
-    
-    return '';
-  } catch (error) {
-    console.error('Extract error:', error);
-    return '';
+  console.log(`📦 Parsed ${chunks.length} chunks from Wit.ai`);
+
+  // 2. Logic to get the best text
+  // Wit.ai /dictation sends multiple is_final blocks for long speech.
+  // We need to join all blocks that have is_final=true.
+  // If no is_final, we take the text from the very last chunk.
+
+  const finalChunks = chunks.filter(c => c.is_final);
+
+  if (finalChunks.length > 0) {
+    // Join all final segments (e.g. "Hello." + " How are you?")
+    finalTranscription = finalChunks.map(c => c.text).join(' ');
+  } else if (chunks.length > 0) {
+    // Fallback: Take the text from the absolute last chunk received
+    finalTranscription = chunks[chunks.length - 1].text;
   }
+
+  return finalTranscription.trim();
 };
 
 export const convertToText = async (audioUri: string): Promise<string> => {
   try {
-    console.log('📤 Starting speech-to-text conversion...');
+    console.log('📤 Fetching Blob from URI...');
     
-    if (!WIT_AI_TOKEN || WIT_AI_TOKEN.length < 10) {
-      return 'Error: Token not configured';
-    }
+    const response = await fetch(audioUri);
+    const blob = await response.blob();
 
-    console.log('🔑 Using token:', WIT_AI_TOKEN.substring(0, 8) + '...');
+    console.log(`📊 Blob size: ${blob.size}`);
 
-    const fileInfo = await FileSystem.getInfoAsync(audioUri);
+    console.log('📤 Sending Blob to Wit.ai...');
     
-    if (!fileInfo.exists) {
-      throw new Error('Audio file does not exist');
-    }
-
-    const fileSizeKB = ((fileInfo.size || 0) / 1024).toFixed(2);
-    const fileExtension = audioUri.split('.').pop()?.toLowerCase();
-    
-    console.log('📊 File size:', `${fileSizeKB} KB`);
-    console.log('📄 File extension:', fileExtension);
-
-    // Determine content type
-    const contentType = fileExtension === 'wav' ? 'audio/wav' : 'audio/mpeg';
-
-    console.log('📖 Reading audio file...');
-    const audioBase64 = await FileSystem.readAsStringAsync(audioUri, {
-      encoding: FileSystem.EncodingType.Base64,
-    });
-
-    if (!audioBase64 || audioBase64.length === 0) {
-      throw new Error('Failed to read audio file');
-    }
-
-    console.log('📊 Base64 length:', audioBase64.length);
-
-    // Convert base64 to binary
-    console.log('🔄 Converting to binary...');
-    const binaryString = atob(audioBase64);
-    const bytes = new Uint8Array(binaryString.length);
-    
-    for (let i = 0; i < binaryString.length; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
-    }
-
-    console.log('📤 Sending to Wit.ai...');
-    console.log('   - Content-Type:', contentType);
-    console.log('   - Body size:', bytes.length, 'bytes');
-
-    const response = await fetch(WIT_API_URL, {
+    const witResponse = await fetch(WIT_API_URL, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${WIT_AI_TOKEN}`,
-        'Content-Type': contentType,
+        'Content-Type': 'audio/wav',
       },
-      body: bytes,
+      body: blob 
     });
 
-    console.log('📥 Response status:', response.status);
+    const text = await witResponse.text();
+    console.log('📥 Wit.ai Status:', witResponse.status);
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('❌ API Error Response:', errorText);
-      return `API error ${response.status}`;
+    if (!witResponse.ok) {
+      console.error('❌ Wit Error:', text);
+      return `Error: ${witResponse.status}`;
     }
 
-    const responseText = await response.text();
-    console.log('📥 Raw response length:', responseText.length);
+    const transcription = parseWitResponse(text);
+    console.log('✅ Result:', transcription);
+    return transcription || 'No speech detected';
 
-    // Parse the streaming response
-    let transcribedText = extractTextFromResponse(responseText);
-    
-    // If regex method didn't work, try JSON parsing method
-    if (!transcribedText) {
-      transcribedText = parseWitResponse(responseText);
-    }
-
-    console.log('✅ Final transcribed text:', transcribedText);
-    
-    if (!transcribedText || transcribedText.trim() === '') {
-      return 'No speech detected. Please speak clearly and try again.';
-    }
-    
-    return transcribedText.trim();
   } catch (error) {
-    console.error('❌ speechToText Error:', error);
-    if (error instanceof Error) {
-      return `Error: ${error.message}`;
-    }
+    console.error('❌ Error:', error);
     return MESSAGES.ERROR;
   }
 };
