@@ -3,7 +3,7 @@ import mongoose, { Schema, Document } from 'mongoose';
 
 export interface ITranscription extends Document {
   text: string;
-  audioPath: string;
+  audioPath?: string;
   createdAt: Date;
 }
 
@@ -15,7 +15,7 @@ const TranscriptionSchema: Schema = new Schema({
   },
   audioPath: { 
     type: String, 
-    required: true 
+    required: false
   },
   createdAt: { 
     type: Date, 

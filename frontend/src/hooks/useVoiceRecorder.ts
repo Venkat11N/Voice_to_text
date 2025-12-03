@@ -4,8 +4,8 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { convertToText } from '../services/speechToText';
 import { VoiceRecorderHook } from '../types';
 import { MESSAGES } from '../config/constants';
+import {api} from '../services/api'
 
-// Recording options
 const RECORDING_OPTIONS = {
   isMeteringEnabled: true,
   android: {
@@ -40,49 +40,28 @@ export const useVoiceRecorder = (): VoiceRecorderHook => {
   const [audioFileUri, setAudioFileUri] = useState<string>('');
   
   const recordingRef = useRef<Audio.Recording | null>(null);
+  // Track actual recording start time
+  const startTimeRef = useRef<number>(0);
 
-  // Initialize permissions on mount (optional but good UX)
   useEffect(() => {
-    const getPermissions = async () => {
-      try {
-        await Audio.requestPermissionsAsync();
-      } catch (error) {
-        console.error('Permission request error:', error);
-      }
-    };
-    getPermissions();
-
-    // Cleanup
     return () => {
       if (recordingRef.current) {
-        try {
-          recordingRef.current.stopAndUnloadAsync();
-        } catch (e) {
-          // Ignore cleanup errors
-        }
+        recordingRef.current.stopAndUnloadAsync();
       }
     };
   }, []);
 
   const startRecording = useCallback(async (): Promise<void> => {
     try {
-      // Check if already recording
-      if (isRecording || recordingRef.current) {
-        console.log('⚠️ Already recording');
-        return;
-      }
+      if (isRecording || recordingRef.current) return;
 
       console.log('🎤 Starting recording...');
-
-      // 1. Always Request Permission check
-      const permission = await Audio.requestPermissionsAsync();
-      if (!permission.granted) {
+      const { granted } = await Audio.requestPermissionsAsync();
+      if (!granted) {
         alert(MESSAGES.PERMISSION_DENIED);
         return;
       }
 
-      // 2. ALWAYS Reset Audio Mode before EVERY recording
-      // This fixes the "Recording not allowed on iOS" error
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
         playsInSilentModeIOS: true,
@@ -90,103 +69,83 @@ export const useVoiceRecorder = (): VoiceRecorderHook => {
         shouldDuckAndroid: true,
       });
 
-      // Clear previous state
       setTranscript('');
       setAudioFileUri('');
 
-      console.log('📼 Creating recording instance...');
-      
-      // 3. Create new recording
-      const { recording } = await Audio.Recording.createAsync(
-        RECORDING_OPTIONS
-      );
-
+      const { recording } = await Audio.Recording.createAsync(RECORDING_OPTIONS);
       recordingRef.current = recording;
-      setIsRecording(true);
+      startTimeRef.current = Date.now(); // MARK START TIME
       
+      setIsRecording(true);
       console.log('✅ Recording started');
     } catch (error) {
       console.error('❌ Recording error:', error);
       setIsRecording(false);
       recordingRef.current = null;
-      
-      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-      alert('Failed to start recording: ' + errorMsg);
     }
   }, [isRecording]);
 
   const stopRecording = useCallback(async (): Promise<void> => {
-    try {
-      if (!recordingRef.current) {
-        console.log('⚠️ No active recording');
-        setIsRecording(false);
-        return;
-      }
+    if (!recordingRef.current) return;
 
-      console.log('⏹️ Stopping recording...');
+    // Check if recording was too short (less than 1 second)
+    const duration = Date.now() - startTimeRef.current;
+    if (duration < 1000) {
+      console.log('⚠️ Recording too short (<1s), discarding...');
+      try {
+        await recordingRef.current.stopAndUnloadAsync();
+      } catch (e) {}
+      recordingRef.current = null;
       setIsRecording(false);
-      setIsProcessing(true);
+      return; // Exit early, don't send to API
+    }
 
-      console.log('📼 Stopping and unloading...');
-      
-      // Stop recording
+    console.log('⏹️ Stopping recording...');
+    setIsRecording(false);
+    setIsProcessing(true);
+
+    try {
       await recordingRef.current.stopAndUnloadAsync();
-      
-      // OPTIONAL: Disable recording mode to allow playback through speakers
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-      });
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
 
-      // Get URI
       const uri = recordingRef.current.getURI();
-      console.log('📁 Recording URI:', uri);
-
-      // Clear recording reference
       recordingRef.current = null;
 
-      if (!uri) {
-        throw new Error('No recording URI');
-      }
+      if (!uri) throw new Error('No URI');
 
-      // Check file exists
+      // Double check file size
       const fileInfo = await FileSystem.getInfoAsync(uri);
-      console.log('📊 File info:', fileInfo);
-
-      if (!fileInfo.exists || !fileInfo.size) {
-        throw new Error('Recording file not found or empty');
+      if (!fileInfo.exists || (fileInfo.size || 0) < 1000) {
+        throw new Error('File too small or empty');
       }
 
-      const fileSizeKB = (fileInfo.size / 1024).toFixed(2);
-      const fileExtension = uri.split('.').pop()?.toLowerCase();
-      console.log('✅ File saved:', `${fileSizeKB} KB`);
-      console.log('📁 File extension:', fileExtension);
-      
+      console.log('✅ File saved:', uri);
       setAudioFileUri(uri);
 
-      console.log('🔄 Converting speech to text...');
+      console.log('🔄 Converting...');
       const text = await convertToText(uri);
-      console.log('📝 Transcription result:', text);
-      
       setTranscript(text);
+
+      if(text && text !== 'No speech detected.') {
+        console.log('Saving voice note to DB...');
+        await api.saveVoiceNote(text, uri);
+        console.log('Saved to DB!');
+      }
 
       console.log('✅ Done!');
     } catch (error) {
-      console.error('❌ Stop recording error:', error);
-      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-      setTranscript('Error: ' + errorMsg);
-      recordingRef.current = null;
+      console.error('❌ Stop error:', error);
+      // Don't show error to user for cancelled/short recordings
+      // setTranscript('Error processing recording'); 
     } finally {
       setIsProcessing(false);
-      setIsRecording(false);
     }
   }, []);
 
   const clearTranscript = useCallback((): void => {
     setTranscript('');
     if (audioFileUri) {
-      // Optional: Delete file when clearing transcript
-      FileSystem.deleteAsync(audioFileUri, { idempotent: true })
-        .catch(() => console.log('Could not delete'));
+      FileSystem.deleteAsync(audioFileUri, { idempotent: true }).catch(() => {});
       setAudioFileUri('');
     }
   }, [audioFileUri]);

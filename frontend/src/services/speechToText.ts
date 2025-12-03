@@ -7,7 +7,7 @@ const parseWitResponse = (responseText: string): string => {
   let startIndex = 0;
   let chunks: any[] = [];
 
-  // 1. Extract all JSON objects from the stream
+
   for (let i = 0; i < responseText.length; i++) {
     const char = responseText[i];
     if (char === '{') {
@@ -27,18 +27,15 @@ const parseWitResponse = (responseText: string): string => {
 
   console.log(`📦 Parsed ${chunks.length} chunks from Wit.ai`);
 
-  // 2. Logic to get the best text
-  // Wit.ai /dictation sends multiple is_final blocks for long speech.
-  // We need to join all blocks that have is_final=true.
-  // If no is_final, we take the text from the very last chunk.
+
 
   const finalChunks = chunks.filter(c => c.is_final);
 
   if (finalChunks.length > 0) {
-    // Join all final segments (e.g. "Hello." + " How are you?")
+
     finalTranscription = finalChunks.map(c => c.text).join(' ');
   } else if (chunks.length > 0) {
-    // Fallback: Take the text from the absolute last chunk received
+
     finalTranscription = chunks[chunks.length - 1].text;
   }
 

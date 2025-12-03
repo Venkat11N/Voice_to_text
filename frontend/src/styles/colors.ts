@@ -13,17 +13,20 @@ interface ColorPalette {
   button: string;
 }
 
-export const colors: ColorPalette = {
-  primary: '#007AFF',
-  danger: '#FF3B30',
-  disabled: '#CCC',
-  background: '#F0F4F8',
-  white: '#FFF',
+export const colors = {
+  background: '#F2F2F7', 
+  white: '#FFFFFF',
+  primary: '#007AFF',    
   text: {
-    primary: '#1A1A2E',
-    secondary: '#666',
-    dark: '#333',
+    dark: '#000000',
+    secondary: '#8E8E93',
+    light: '#FFFFFF',
   },
-  shadow: '#000',
-  button: '#E0E0E0',
+  danger: '#FF3B30',
+  border: '#C6C6C8',
+  shadow: '#000000',
+  inputBackground: '#FFFFFF',
+  disabled: '#D1D1D6',
 };
+
+

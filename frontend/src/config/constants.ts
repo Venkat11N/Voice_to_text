@@ -2,7 +2,7 @@ export const WIT_AI_TOKEN: string = process.env.WIT_AI_TOKEN || '';
 
 export const WIT_API_URL: string = 'https://api.wit.ai/dictation?v=20231117';
 
-export const BACKEND_URL: string = process.env.BACKEND_URL;
+export const BACKEND_URL: string = 'https://4091f98dfb0c.ngrok-free.app/api';
 
 export interface MessagesType {
   readonly DEFAULT: string;

@@ -1,4 +1,4 @@
-import React, { FC, useState, useRef } from 'react';
+import React, { FC, useState } from 'react';
 import {
   View,
   TextInput,
@@ -7,7 +7,6 @@ import {
   StyleSheet,
   ViewStyle,
   TextStyle,
-  Keyboard,
   Platform,
 } from 'react-native';
 import { colors } from '../styles/colors';
@@ -20,15 +19,6 @@ interface KeyboardInputProps {
   isProcessing: boolean;
 }
 
-interface Styles {
-  container: ViewStyle;
-  inputWrapper: ViewStyle;
-  textInput: TextStyle;
-  actionButton: ViewStyle;
-  actionButtonRecording: ViewStyle;
-  actionButtonText: TextStyle;
-}
-
 const KeyboardInput: FC<KeyboardInputProps> = ({ 
   onSubmit, 
   onStartRecording,
@@ -38,8 +28,9 @@ const KeyboardInput: FC<KeyboardInputProps> = ({
 }) => {
   const [inputText, setInputText] = useState<string>('');
   const [inputHeight, setInputHeight] = useState<number>(40);
-  const inputRef = useRef<TextInput>(null);
-
+  
+  // Track start time to prevent accidental short recordings
+  const [pressStartTime, setPressStartTime] = useState<number>(0);
 
   const hasText = inputText.trim().length > 0;
 
@@ -47,53 +38,62 @@ const KeyboardInput: FC<KeyboardInputProps> = ({
     if (hasText && !isProcessing) {
       onSubmit(inputText.trim());
       setInputText('');
-      setInputHeight(2); 
-      
-      // Keyboard.dismiss(); 
+      setInputHeight(40); 
     }
   };
 
-  const handleContentSizeChange = (event: any) => {
-    const height = event.nativeEvent.contentSize.height;
-    setInputHeight(Math.min(Math.max(40, height), 100));
+  const handlePressIn = () => {
+    if (!hasText && !isProcessing) {
+      setPressStartTime(Date.now());
+      onStartRecording();
+    }
+  };
+
+  const handlePressOut = () => {
+    if (!hasText && isRecording) {
+      const duration = Date.now() - pressStartTime;
+      // If held for less than 500ms, consider it a mistake or too short
+      if (duration < 500) {
+        console.log('Recording too short, cancelling...');
+        // You might want a specific cancel function, but stop works too
+        // usually backend/frontend handles empty files, but let's be safe
+      }
+      onStopRecording();
+    }
   };
 
   return (
     <View style={styles.container}>
-
       <View style={styles.inputWrapper}>
         <TextInput
-          ref={inputRef}
-          style={[styles.textInput, { height: inputHeight }]}
+          style={[styles.textInput, { height: Math.max(40, inputHeight) }]}
           value={inputText}
           onChangeText={setInputText}
-          placeholder={isRecording ? "Recording..." : "Type a message..."}
+          placeholder={isRecording ? "Recording..." : "Type a message"}
           placeholderTextColor={colors.text.secondary}
           multiline={true}
-          maxLength={500}
+          maxLength={1000}
           editable={!isProcessing && !isRecording}
-          returnKeyType="default"
-          onContentSizeChange={handleContentSizeChange}
-          scrollEnabled={inputHeight > 80}
+          onContentSizeChange={(e) => {
+            setInputHeight(Math.min(e.nativeEvent.contentSize.height, 100));
+          }}
         />
       </View>
-
 
       <TouchableOpacity
         style={[
           styles.actionButton,
-          isRecording && styles.actionButtonRecording, 
+          isRecording && styles.actionButtonRecording,
           isProcessing && { backgroundColor: colors.disabled }
         ]}
-       
         onPress={hasText ? handleSend : undefined}
-        onPressIn={!hasText ? onStartRecording : undefined}
-        onPressOut={!hasText ? onStopRecording : undefined}
+        onPressIn={!hasText ? handlePressIn : undefined}
+        onPressOut={!hasText ? handlePressOut : undefined}
         activeOpacity={0.7}
         disabled={isProcessing}
+        delayPressIn={0} // Ensure press starts immediately
       >
         <Text style={styles.actionButtonText}>
-
           {isProcessing ? '⏳' : (hasText ? '➤' : (isRecording ? '🔴' : '🎤'))}
         </Text>
       </TouchableOpacity>
@@ -101,63 +101,59 @@ const KeyboardInput: FC<KeyboardInputProps> = ({
   );
 };
 
-const styles = StyleSheet.create<Styles>({
+const styles = StyleSheet.create({
   container: {
     width: '100%',
-    flexDirection: 'row', 
-    alignItems: 'flex-end', 
+    flexDirection: 'row',
+    alignItems: 'flex-end',
     paddingHorizontal: 10,
     paddingVertical: 10,
     backgroundColor: 'transparent', 
-    borderTopWidth: 1,
-    borderTopColor: '#F0F0F0',
   },
   inputWrapper: {
-    flex: 1, 
+    flex: 1,
     backgroundColor: colors.white,
     borderRadius: 25,
     paddingHorizontal: 15,
     paddingVertical: 5,
-    marginRight: 10, 
+    marginRight: 8,
     minHeight: 50,
     justifyContent: 'center',
-    elevation: 2,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 1.41,
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
   textInput: {
     fontSize: 16,
     color: colors.text.dark,
-    paddingTop: 10,
-    paddingBottom: 10,
-    maxHeight: 100,
+    paddingTop: 8,
+    paddingBottom: 8,
   },
   actionButton: {
     width: 50,
     height: 50,
     borderRadius: 25,
-    backgroundColor: colors.primary, 
+    backgroundColor: colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 4,
+    marginBottom: 0, 
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 3,
-    marginBottom: 0, 
+    elevation: 5,
   },
   actionButtonRecording: {
-    backgroundColor: colors.danger, 
-    transform: [{ scale: 1.1 }] 
+    backgroundColor: colors.danger,
+    transform: [{ scale: 1.15 }], 
   },
   actionButtonText: {
     color: colors.white,
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: 'bold',
   },
 });
 
 export default KeyboardInput;
-

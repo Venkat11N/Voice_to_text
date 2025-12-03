@@ -50,6 +50,27 @@ router.post('/upload', upload.single('audio'), async (req: Request, res: Respons
   }
 });
 
+router.post('/text', async(req:Request, res: Response): Promise<void> => {
+  try {
+    const {text} = req.body;
+
+    if(!text) {
+      res.status(400).json({error: 'Text is required'});
+      return;
+    }
+
+    const newRecord = new Transcription({
+      text: text,
+    });
+    await newRecord.save()
+
+    res.status(201).json({message: 'Text saved', data: newRecord});
+  } catch (error) {
+    console.error('Text Save Error:', error);
+    res.status(500).json({error: 'Server error'});
+  }
+});
+
 const uplaod = multer({ storage: storage});
 
 router.post('/upload', upload.single('audio'), async(req: Request, res: Response, ) => {
