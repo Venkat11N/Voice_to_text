@@ -39,6 +39,7 @@ export const useVoiceRecorder = (): VoiceRecorderHook => {
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [audioFileUri, setAudioFileUri] = useState<string>('');
   
+  
   const recordingRef = useRef<Audio.Recording | null>(null);
   // Track actual recording start time
   const startTimeRef = useRef<number>(0);

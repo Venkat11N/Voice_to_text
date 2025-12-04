@@ -42,6 +42,16 @@ const App: FC = () => {
 
   const handleKeyboardSubmit = async (text: string): void => {
     setTranscript(text);
+    setDbSaveStatus('saving');
+    try {
+      console.log('Saving text to DB...');
+      await api.saveText(text);
+      setDbSaveStatus('saved');
+    } catch (error) {
+      console.error(error);
+      setDbSaveStatus('error');
+    }
+
     // Keep keyboard open for faster chatting, or uncomment next line to close
     console.log('Saving text to DB...');
     await api.saveText(text);
@@ -49,6 +59,13 @@ const App: FC = () => {
     // Keyboard.dismiss(); 
 
   };
+
+  const getStatusLabel = () => {
+    if (isRecording) return 'Recoding...';
+    if (isProcessing) return 'Converting';
+    if (dbSaveStatus === 'saving') return 'Saving to Database...';
+    if (dbSaveStatus === 'saved') return 'Saved to Database';
+  }
 
   return (
     <SafeAreaProvider>
